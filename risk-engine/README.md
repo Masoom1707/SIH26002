@@ -23,6 +23,26 @@ risk-engine/
 
 ---
 
+## ⚠️ Demo Notes
+
+### Geolocation & HTTPS
+`navigator.geolocation` only works on `localhost` or a real **HTTPS** origin. If demoing across
+devices on the same WiFi (`http://192.168.x.x:5173`), location will silently fail as "denied".
+Use a free HTTPS tunnel for cross-device demos:
+```bash
+ngrok http 5173
+```
+
+### OSRM Public Demo Server
+Route planning uses `router.project-osrm.org` — a free public demo server. It is rate-limited
+and **not intended for production traffic**. For a production/judging setup that needs guaranteed
+availability, self-host OSRM via Docker (still free):
+```bash
+docker run -t -v $(pwd)/data:/data osrm/osrm-backend osrm-routed --algorithm mld /data/your-region.osrm
+```
+
+---
+
 ## First-time setup
 
 ### 1. Create a virtual environment

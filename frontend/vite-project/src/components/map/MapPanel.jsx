@@ -1,17 +1,25 @@
 import { useState, useEffect } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents } from 'react-leaflet';
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import toast from 'react-hot-toast';
 import { vehicles as initialVehicles, incidents } from '../../data/mockData';
 import { Badge } from '../common/Badge';
 import { getLandslideRisk } from '../../services/api';
+import demoLocations from '../../data/demoLocations.json';
 
 // ---------------------------------------------------------------------------
 // Existing marker icons (unchanged)
 // ---------------------------------------------------------------------------
 const vehicleIcon  = L.divIcon({ className: 'vehicle-marker',  iconSize: [14, 14], iconAnchor: [7, 7] });
 const incidentIcon = L.divIcon({ className: 'incident-marker', iconSize: [16, 16], iconAnchor: [8, 8] });
+
+// "You are here" — distinct blue pulsing dot
+const userLocationIcon = L.divIcon({ className: 'user-location-marker', iconSize: [20, 20], iconAnchor: [10, 10] });
+
+// Demo location pin — larger, always-visible
+const demoPinHigh = L.divIcon({ className: 'demo-pin demo-pin-high', iconSize: [22, 22], iconAnchor: [11, 22] });
+const demoPinLow  = L.divIcon({ className: 'demo-pin demo-pin-low',  iconSize: [22, 22], iconAnchor: [11, 22] });
 
 // ---------------------------------------------------------------------------
 // Risk marker icons — colour reflects risk category
@@ -48,10 +56,25 @@ const ClickHandler = ({ onMapClick }) => {
   return null;
 };
 
+// Recenters the map when the user's coordinates become available.
+// IMPORTANT: depend on lat/lon *values* not the coords object reference —
+// a new object with the same lat/lon won't re-trigger the effect.
+const RecenterOnUser = ({ coords }) => {
+  const map = useMap();
+  const lat = coords?.lat;
+  const lon = coords?.lon;
+  useEffect(() => {
+    if (lat != null && lon != null) {
+      map.flyTo([lat, lon], 14, { animate: true, duration: 1.2 });
+    }
+  }, [lat, lon, map]);   // primitive deps — fires whenever position actually changes
+  return null;
+};
+
 // ---------------------------------------------------------------------------
 // Main component
 // ---------------------------------------------------------------------------
-export const MapPanel = () => {
+export const MapPanel = ({ userCoords = null, activeRoute = null }) => {
   const [liveVehicles, setLiveVehicles] = useState(initialVehicles);
 
   // Risk prediction state
@@ -94,9 +117,12 @@ export const MapPanel = () => {
       style={{ height: '100%', width: '100%' }}
     >
       <TileLayer
-        url="https://tiles.stadiamaps.com/tiles/alidade_smooth_dark/{z}/{x}/{y}{r}.png"
-        attribution='&copy; Stadia Maps'
+        url="https://tiles.stadiamaps.com/tiles/alidade_smooth/{z}/{x}/{y}{r}.png"
+        attribution="&copy; Stadia Maps &copy; OpenStreetMap contributors"
       />
+
+      {/* Fly to user's location when coords arrive */}
+      <RecenterOnUser coords={userCoords} />
 
       {/* Click-to-predict handler */}
       <ClickHandler onMapClick={handleMapClick} />
@@ -112,6 +138,16 @@ export const MapPanel = () => {
           dashArray="5, 10"
         />
       ))}
+
+      {/* Active route from RoutePanel — orange, solid, thicker */}
+      {activeRoute && activeRoute.length > 1 && (
+        <Polyline
+          positions={activeRoute}
+          color="#f97316"
+          weight={5}
+          opacity={0.85}
+        />
+      )}
 
       {/* Live Vehicles */}
       {liveVehicles.map((v) => (
@@ -133,6 +169,53 @@ export const MapPanel = () => {
             <div style={{ padding: '4px' }}>
               <div style={{ fontWeight: 600, color: 'var(--danger)', fontSize: '1rem' }}>{inc.type}</div>
               <Badge type="danger">{inc.severity}</Badge>
+            </div>
+          </Popup>
+        </Marker>
+      ))}
+
+      {/* "You are here" marker */}
+      {userCoords && (
+        <Marker position={[userCoords.lat, userCoords.lon]} icon={userLocationIcon}>
+          <Popup>
+            <div style={{ padding: '4px', fontWeight: 600 }}>📍 Your Location</div>
+          </Popup>
+        </Marker>
+      )}
+
+      {/* Permanent demo location markers — colour-coded by risk type */}
+      {demoLocations.map((loc) => (
+        <Marker
+          key={`demo-${loc.lat}-${loc.lon}`}
+          position={[loc.lat, loc.lon]}
+          icon={loc.type === 'risky' ? demoPinHigh : demoPinLow}
+          zIndexOffset={500}
+        >
+          <Popup minWidth={200}>
+            <div style={{ padding: '8px' }}>
+              <div style={{ fontWeight: 700, fontSize: '0.95rem', marginBottom: 4,
+                color: loc.type === 'risky' ? '#ef4444' : '#10b981' }}>
+                {loc.type === 'risky' ? '🔴' : '🟢'} {loc.name}
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+                <span style={{ fontSize: '0.8rem', color: '#555' }}>{loc.riskCategory} risk</span>
+                <span style={{ fontWeight: 700, color: loc.type === 'risky' ? '#ef4444' : '#10b981' }}>
+                  {loc.riskPercentage.toFixed(1)}%
+                </span>
+              </div>
+              <div style={{ height: 5, background: '#e5e7eb', borderRadius: 3, overflow: 'hidden', marginBottom: 8 }}>
+                <div style={{ height: '100%', width: `${loc.riskPercentage}%`,
+                  background: loc.type === 'risky' ? '#ef4444' : '#10b981', borderRadius: 3 }} />
+              </div>
+              <div style={{ fontSize: '0.75rem', color: '#666', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '4px' }}>
+                <span>Elevation: <strong>{loc.features.elevation} m</strong></span>
+                <span>Slope: <strong>{loc.features.slope}°</strong></span>
+                <span>Dist road: <strong>{loc.features.dist_to_road < 1000 ? `${loc.features.dist_to_road} m` : `${(loc.features.dist_to_road/1000).toFixed(1)} km`}</strong></span>
+                <span>Rainfall: <strong>{loc.features.rainfall.toFixed(1)} mm</strong></span>
+              </div>
+              <div style={{ marginTop: 6, fontSize: '0.7rem', color: '#888', fontStyle: 'italic' }}>
+                Source: historical landslide survey data
+              </div>
             </div>
           </Popup>
         </Marker>

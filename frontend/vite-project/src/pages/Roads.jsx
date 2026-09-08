@@ -1,10 +1,25 @@
 import { roads } from '../data/mockData';
 import { Badge } from '../components/common/Badge';
 
+// Fix #8: Label clearly as illustrative fleet-ops data (not ML model output)
+const DataSourceNote = () => (
+  <div style={{
+    padding: '10px 14px', marginBottom: '16px', borderRadius: '6px', fontSize: '0.8rem',
+    background: 'rgba(14, 165, 233, 0.08)', border: '1px solid rgba(14, 165, 233, 0.25)',
+    color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: '8px',
+  }}>
+    <span style={{ color: 'var(--info)', fontWeight: 700 }}>ℹ Fleet Ops Module</span>
+    Road status and risk scores here are illustrative fleet-logistics scenario data,
+    not output from the landslide ML model. Real landslide risk predictions are shown
+    on the Dashboard map and Alerts page.
+  </div>
+);
+
 export const Roads = () => {
   return (
     <div>
-      <h2 style={{ marginBottom: '24px' }}>Road Accessibility Overview</h2>
+      <h2 style={{ marginBottom: '16px' }}>Road Accessibility Overview</h2>
+      <DataSourceNote />
       <div className="card">
         <div className="table-container">
           <table>

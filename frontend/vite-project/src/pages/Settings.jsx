@@ -20,9 +20,9 @@ export const Settings = () => {
           <div className="form-group">
             <label className="form-label">Refresh Interval (Data Pull)</label>
             <select className="form-control">
-              <option>Real-time (WebSocket)</option>
-              <option>Every 30 seconds</option>
+              <option>Auto-refresh every 30 seconds (current)</option>
               <option>Every 1 minute</option>
+              <option>Every 5 minutes</option>
             </select>
           </div>
           <button className="btn btn-primary" style={{ marginTop: '10px' }}>Save System Preferences</button>
@@ -34,9 +34,12 @@ export const Settings = () => {
             <label className="form-label">Critical Alert Forwarding</label>
             <input type="email" className="form-control" defaultValue="admin-ops@sih26002.gov.in" />
           </div>
-          <div className="form-group" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '20px' }}>
-            <input type="checkbox" id="sms" defaultChecked style={{ width: '18px', height: '18px' }} />
-            <label htmlFor="sms">Enable SMS alerts for field officers</label>
+          <div className="form-group" style={{ display: 'flex', gap: '10px', alignItems: 'center', marginTop: '20px', opacity: 0.5 }}>
+            <input type="checkbox" id="sms" disabled style={{ width: '18px', height: '18px' }} />
+            <label htmlFor="sms" style={{ color: 'var(--text-secondary)' }}>
+              Enable SMS alerts for field officers
+              <span style={{ marginLeft: '8px', fontSize: '0.75rem', padding: '1px 7px', background: 'var(--surface-elevated)', border: '1px solid var(--border)', borderRadius: '10px' }}>Coming soon</span>
+            </label>
           </div>
           <button className="btn btn-primary" style={{ marginTop: '20px' }}>Update Notifications</button>
         </div>

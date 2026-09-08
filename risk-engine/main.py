@@ -111,13 +111,18 @@ app.add_middleware(
         "http://127.0.0.1:5173",
         "http://127.0.0.1:1710",
     ],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
 # ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
+
+# Nodata sentinel returned by rasterio when coordinates land on a no-data pixel.
+# The DEM uses -32768 (int16 min). We treat any value ≤ -9999 as nodata.
+_DEM_NODATA = _dem_src.nodata  # typically -32768.0
+
 
 def _sample(src: rasterio.DatasetReader, lat: float, lon: float) -> float:
     """Sample a single float value from a rasterio dataset at (lat, lon)."""
@@ -133,6 +138,28 @@ def _sample_rainfall(lat: float, lon: float) -> float:
     # Coordinate names match the IMD NetCDF format (LATITUDE / LONGITUDE)
     val = _rain_da.sel(LATITUDE=lat, LONGITUDE=lon, method="nearest")
     return float(val.values)
+
+
+def _is_nodata(val: float) -> bool:
+    """True if val is the raster's nodata sentinel or NaN — i.e. outside actual data coverage."""
+    import math
+    if math.isnan(val):
+        return True
+    # Accept both the exact nodata value and the common -9999 / -32768 sentinels
+    if _DEM_NODATA is not None and val == _DEM_NODATA:
+        return True
+    return val <= -9999
+
+
+# Canonical outside-coverage response shape — HTTP 200, not 500.
+_OUTSIDE_COVERAGE = {
+    "error": "outside_coverage",
+    "message": (
+        "This location is outside the model's data coverage area (North-Eastern India, "
+        "lat 24.97–25.83, lon 92.52–93.47). The landslide risk model was trained on the "
+        "Dima Hasao district DEM and cannot make predictions outside it."
+    ),
+}
 
 
 def _get_risk_category(probability: float) -> str:
@@ -153,8 +180,14 @@ def _extract_all_features(lat: float, lon: float) -> dict:
     """
     Replicate extract_all_features() from the notebook using in-memory rasters.
     Returns a dict with: elevation, slope, aspect, dist_to_road, rainfall.
+    Raises ValueError with outside_coverage key if the DEM pixel is nodata.
     """
-    elevation   = _sample(_dem_src,    lat, lon)
+    elevation = _sample(_dem_src, lat, lon)
+
+    # Detect nodata pixels — coordinates inside bounding box but outside actual data
+    if _is_nodata(elevation):
+        raise ValueError("outside_coverage")
+
     slope       = _sample(_slope_src,  lat, lon)
     aspect      = _sample(_aspect_src, lat, lon)
     dist_to_road = _sample(_dist_src,  lat, lon)
@@ -173,8 +206,14 @@ def _predict_landslide_risk(lat: float, lon: float) -> dict:
     """
     Full pipeline: extract features → model inference → risk category.
     Mirrors predict_landslide_risk() from the notebook.
+    Returns _OUTSIDE_COVERAGE sentinel dict if the point has nodata elevation.
     """
-    features = _extract_all_features(lat, lon)
+    try:
+        features = _extract_all_features(lat, lon)
+    except ValueError as exc:
+        if str(exc) == "outside_coverage":
+            return {**_OUTSIDE_COVERAGE, "latitude": lat, "longitude": lon}
+        raise
 
     # Build DataFrame with exact column order expected by the model
     X = pd.DataFrame(
@@ -225,19 +264,16 @@ def predict(
 
     Returns elevation, slope, aspect, distance-to-road, and mean daily rainfall
     alongside the model's binary prediction (0/1), risk percentage, and category.
+
+    If the coordinates are outside the DEM's coverage area (bounding box or nodata pixel),
+    returns HTTP 200 with {"error": "outside_coverage", "message": "..."} — this is an
+    expected condition, not a server error.
     """
-    # Validate coordinates are within DEM bounds
+    # Bounding-box check — return outside_coverage (200, not 422) so frontend can handle it
     dem_bounds = _dem_src.bounds
     if not (dem_bounds.left <= lon <= dem_bounds.right and
             dem_bounds.bottom <= lat <= dem_bounds.top):
-        raise HTTPException(
-            status_code=422,
-            detail=(
-                f"Coordinates ({lat}, {lon}) are outside the DEM coverage area. "
-                f"Valid range: lat [{dem_bounds.bottom:.4f}, {dem_bounds.top:.4f}], "
-                f"lon [{dem_bounds.left:.4f}, {dem_bounds.right:.4f}]."
-            ),
-        )
+        return {**_OUTSIDE_COVERAGE, "latitude": lat, "longitude": lon}
 
     try:
         result = _predict_landslide_risk(lat, lon)
@@ -245,3 +281,54 @@ def predict(
         raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Batch endpoint
+# ---------------------------------------------------------------------------
+
+from typing import List
+from pydantic import BaseModel
+
+class _Point(BaseModel):
+    lat: float
+    lon: float
+
+class _BatchRequest(BaseModel):
+    points: List[_Point]
+
+
+@app.post("/predict-batch")
+def predict_batch(body: _BatchRequest):
+    """
+    Predict landslide risk for multiple lat/lon points in a single request.
+
+    Request body: {"points": [{"lat": .., "lon": ..}, ...]}
+
+    Points outside the DEM bounding box OR on nodata pixels return null, so a
+    route that partially leaves the raster still gets scores for in-bounds segments.
+
+    Response: {"results": [{...same fields as /predict...} | null, ...]}
+    """
+    dem_bounds = _dem_src.bounds
+    results = []
+
+    for pt in body.points:
+        # Bounding-box check — return null so caller can detect coverage gaps
+        if not (dem_bounds.left <= pt.lon <= dem_bounds.right and
+                dem_bounds.bottom <= pt.lat <= dem_bounds.top):
+            results.append(None)
+            continue
+        try:
+            result = _predict_landslide_risk(pt.lat, pt.lon)
+            # Treat outside_coverage sentinel the same as null for batch callers
+            if isinstance(result, dict) and result.get("error") == "outside_coverage":
+                results.append(None)
+            else:
+                results.append(result)
+        except Exception as exc:
+            # Log but don't abort the whole batch
+            print(f"⚠ predict-batch error at ({pt.lat}, {pt.lon}): {exc}")
+            results.append(None)
+
+    return {"results": results}

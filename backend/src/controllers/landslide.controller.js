@@ -2,8 +2,11 @@
  * landslide.controller.js
  *
  * Proxies the GET /api/landslide route to the Python risk-engine service.
- * Pattern mirrors controllers/vechile.controller.js — no model, no storage.
+ * High/Very High risk results are also saved to MongoDB as Alert documents
+ * (fire-and-forget — does not block the response to the frontend).
  */
+
+import Alert from "../models/Alert.model.js";
 
 /**
  * GET /api/landslide?lat=&lon=
@@ -43,6 +46,20 @@ export const getRisk = async (req, res, next) => {
     }
 
     const data = await response.json();
+
+    // --- Fire-and-forget alert save for high-risk predictions ---
+    // Skip outside_coverage responses — they are not real risk events
+    if (!data.error && (data.risk_category === "High" || data.risk_category === "Very High")) {
+      Alert.create({
+        latitude: data.latitude,
+        longitude: data.longitude,
+        riskCategory: data.risk_category,
+        riskPercentage: data.risk_percentage,
+        message: `${data.risk_category} landslide risk (${data.risk_percentage.toFixed(1)}%) detected at (${data.latitude.toFixed(4)}, ${data.longitude.toFixed(4)})`,
+        source: "map-click",
+      }).catch((err) => console.error("alert save failed:", err));
+    }
+
     return res.status(200).json(data);
 
   } catch (error) {
@@ -54,3 +71,4 @@ export const getRisk = async (req, res, next) => {
     return next(error);
   }
 };
+

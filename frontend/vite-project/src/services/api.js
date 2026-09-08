@@ -1,4 +1,4 @@
-import { vehicles, incidents, roads, deliveries, alerts, dashboardKPIs } from '../data/mockData';
+import { vehicles, incidents, roads, deliveries, dashboardKPIs } from '../data/mockData';
 
 const delay = (ms = 800) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -8,7 +8,7 @@ const delay = (ms = 800) => new Promise(resolve => setTimeout(resolve, ms));
 const BACKEND_URL = 'http://localhost:1710';
 
 // ---------------------------------------------------------------------------
-// Mock API functions (unchanged — all data still comes from mockData.js)
+// Mock API functions (unchanged — mock data still used for vehicles, incidents, etc.)
 // ---------------------------------------------------------------------------
 export const api = {
   getDashboardData: async () => {
@@ -41,9 +41,11 @@ export const api = {
     return deliveries;
   },
 
+  // Real alerts — fetches from MongoDB via Express backend
   getAlerts: async () => {
-    await delay();
-    return alerts;
+    const response = await fetch(`${BACKEND_URL}/api/alerts`);
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    return response.json();
   }
 };
 
@@ -70,6 +72,54 @@ export const getLandslideRisk = async (lat, lon) => {
 
   if (!response.ok) {
     // Attempt to extract message from JSON error body (errorMiddleware format)
+    const err = await response.json().catch(() => null);
+    const message = err?.message ?? `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+};
+
+// ---------------------------------------------------------------------------
+// Batch route risk — hits POST /api/route-risk
+// ---------------------------------------------------------------------------
+
+/**
+ * getRouteRisk(points)
+ *
+ * Points: [{ lat, lon }, ...]
+ * Returns { results: [...] } where each entry mirrors /predict or is null (out-of-bounds).
+ */
+export const getRouteRisk = async (points) => {
+  const response = await fetch(`${BACKEND_URL}/api/route-risk`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ points }),
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => null);
+    const message = err?.message ?? `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+
+  return response.json();
+};
+
+// ---------------------------------------------------------------------------
+// Geocoding — proxied through Express so User-Agent header can be set
+// ---------------------------------------------------------------------------
+
+/**
+ * geocodePlace(q)
+ *
+ * Converts a place name string to { lat, lon, display_name } via Nominatim.
+ * Proxy lives at GET /api/geocode?q=<query>
+ */
+export const geocodePlace = async (q) => {
+  const response = await fetch(`${BACKEND_URL}/api/geocode?q=${encodeURIComponent(q)}`);
+
+  if (!response.ok) {
     const err = await response.json().catch(() => null);
     const message = err?.message ?? `HTTP ${response.status}`;
     throw new Error(message);

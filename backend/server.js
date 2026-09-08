@@ -8,6 +8,9 @@ import cors from "cors"
 import { dbConnection } from "./src/config/dbConnection.js";
 import { vehicleRouter } from "./src/routes/vehicle.routes.js";
 import { landslideRouter } from "./src/routes/landslide.routes.js";
+import { routeRiskRouter } from "./src/routes/route-risk.routes.js";
+import { alertRouter } from "./src/routes/alert.routes.js";
+import { geocodeRouter } from "./src/routes/geocode.routes.js";
 import errorMiddleware from "./src/middleware/errorMiddleware.js";
 
 
@@ -44,8 +47,12 @@ app.disable("x-powered-by");
 
 app.use("/api/vehicles", vehicleRouter);
 app.use("/api/landslide", landslideRouter);
+app.use("/api/route-risk", routeRiskRouter);
+app.use("/api/alerts", alertRouter);
+app.use("/api/geocode", geocodeRouter);
 
 app.use(errorMiddleware)
+
 
 
 
