@@ -1,0 +1,15 @@
+{
+  "name": "sih26002-root",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "concurrently -n \"backend,frontend\" -c \"blue,cyan\" \"npm --prefix backend run dev\" \"npm --prefix frontend/vite-project run dev\"",
+    "start": "concurrently -n \"backend,frontend\" -c \"blue,cyan\" \"npm --prefix backend start\" \"npm --prefix frontend/vite-project run dev\"",
+    "backend": "npm --prefix backend run dev",
+    "frontend": "npm --prefix frontend/vite-project run dev",
+    "install:all": "npm install && npm --prefix backend install && npm --prefix frontend/vite-project install"
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  }
+}

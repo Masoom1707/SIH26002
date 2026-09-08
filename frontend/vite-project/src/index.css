@@ -494,3 +494,43 @@ tr:hover td {
   background: linear-gradient(90deg, rgba(239, 68, 68, 0.05) 0%, transparent 100%);
   border-left: 3px solid var(--danger);
 }
+
+/* =========================================================================
+   Landslide Risk Markers (used in MapPanel.jsx click-to-predict feature)
+   ========================================================================= */
+
+.risk-marker {
+  border: 2px solid rgba(255, 255, 255, 0.85);
+  border-radius: 50%;
+}
+
+/* Very Low / Low → green */
+.risk-marker-low {
+  background-color: var(--success);
+  box-shadow: 0 0 10px var(--success), 0 0 20px rgba(16, 185, 129, 0.3);
+}
+
+/* Moderate → amber */
+.risk-marker-moderate {
+  background-color: var(--warning);
+  box-shadow: 0 0 10px var(--warning), 0 0 20px rgba(245, 158, 11, 0.3);
+}
+
+/* High / Very High → red with pulsing glow */
+.risk-marker-high {
+  background-color: var(--danger);
+  box-shadow: 0 0 10px var(--danger);
+  animation: pulse-danger 2s infinite;
+}
+
+/* Loading spinner — neutral pulsing dot */
+.risk-marker-loading {
+  background-color: var(--text-secondary);
+  box-shadow: 0 0 8px rgba(148, 163, 184, 0.4);
+  animation: risk-loading-pulse 1s ease-in-out infinite;
+}
+
+@keyframes risk-loading-pulse {
+  0%, 100% { opacity: 1;   transform: scale(1); }
+  50%       { opacity: 0.4; transform: scale(0.8); }
+}
